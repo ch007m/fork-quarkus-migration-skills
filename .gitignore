@@ -1,0 +1,16 @@
+# Test artifacts
+tests/results/history.jsonl
+
+# Java build output (from test projects)
+**/target/
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# OS
+.DS_Store
+
+# Pi sessions
+.pi/agent/sessions/
