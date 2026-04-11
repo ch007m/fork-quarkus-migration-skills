@@ -1,7 +1,4 @@
-# Test artifacts
-tests/results/history.jsonl
-
-# Java build output (from test projects)
+# Java build output (includes test run artifacts in target/runs/)
 **/target/
 
 # IDE

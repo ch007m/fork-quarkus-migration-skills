@@ -1,54 +1,255 @@
 # Test Harness
 
-The test harness runs migration skills against real Spring Boot / Jakarta EE projects and scores the results to track improvement over time.
+JUnit 5 test suite that runs migration skills against real Spring Boot / Jakarta EE projects, scores the results, and generates skill improvement reviews — all tracked over time.
 
 ## Prerequisites
 
-- `pi` CLI installed and configured with at least one provider API key
-- Java 21+ and Maven
-- Python 3 (for result parsing)
-- `git` (for cloning external test projects)
+- **Java 21+** — `java -version`
+- **Maven 3.9+** — `mvn -version`
+- **[pi](https://github.com/badlogic/pi-mono) CLI** — `pi --version`
+- **git** — for cloning external test projects
+- At least one **AI provider** configured in pi (see [Provider Setup](#provider-setup) below)
 
-## Quick Start
+## Provider Setup
+
+The test harness calls `pi` to run migrations. Pi needs credentials for whichever AI provider/model you want to test. You only need **one** provider configured — pick whichever you have access to.
+
+### Option 1: Interactive Login (Subscriptions)
+
+If you have a subscription (Claude Pro/Max, ChatGPT Plus, GitHub Copilot, Google Gemini CLI, etc.), use pi's interactive login once:
 
 ```bash
+pi
+# then type: /login
+# select your provider and follow the OAuth flow
+```
+
+Tokens are stored in `~/.pi/agent/auth.json` and auto-refresh.
+
+### Option 2: API Keys
+
+Set an environment variable for your provider before running tests:
+
+```bash
+# Anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+
+# OpenAI
+export OPENAI_API_KEY=sk-...
+
+# Google Gemini
+export GEMINI_API_KEY=...
+
+# Mistral
+export MISTRAL_API_KEY=...
+
+# xAI (Grok)
+export XAI_API_KEY=...
+
+# OpenRouter (access to many models)
+export OPENROUTER_API_KEY=...
+```
+
+### Option 3: Cloud Providers
+
+**Google Vertex AI:**
+```bash
+gcloud auth application-default login
+export GOOGLE_CLOUD_PROJECT=your-project
+export GOOGLE_CLOUD_LOCATION=us-central1  # optional, defaults to us-central1
+```
+
+**Amazon Bedrock:**
+```bash
+export AWS_PROFILE=your-profile
+# or
+export AWS_ACCESS_KEY_ID=AKIA...
+export AWS_SECRET_ACCESS_KEY=...
+export AWS_REGION=us-east-1
+```
+
+**Azure OpenAI:**
+```bash
+export AZURE_OPENAI_API_KEY=...
+export AZURE_OPENAI_BASE_URL=https://your-resource.openai.azure.com
+```
+
+### Option 4: Custom Providers (Ollama, etc.)
+
+Pi supports custom providers via `models.json` or extensions. See [pi docs on custom providers](https://github.com/badlogic/pi-mono/blob/main/packages/coding-agent/docs/custom-provider.md).
+
+### Verifying Your Setup
+
+Check which providers and models are available:
+
+```bash
+# List all available models
+pi --list-models
+
+# Search for specific models
+pi --list-models sonnet
+pi --list-models gemini
+pi --list-models gpt
+
+# Quick test — should produce a response
+pi --print "Say hello"
+```
+
+The output shows provider name and model ID — use these as `provider/model` for the `pi.model` property:
+
+```
+provider          model                          context  max-out
+anthropic         claude-sonnet-4-5-20250514     200K     64K
+google            gemini-2.5-pro                 1M       64K
+openai            gpt-4o                         128K     16K
+```
+
+## Running Tests
+
+```bash
+cd tests/
+
 # Run all in-repo test projects with default model
-./tests/harness.sh
+mvn test
 
 # Run a specific project
-./tests/harness.sh --project spring-rest-api
+mvn test -Dpi.project=spring-rest-api
 
-# Run with a specific model
-./tests/harness.sh --model anthropic/sonnet
+# Set provider only (uses provider's default model)
+mvn test -Dpi.provider=anthropic
+mvn test -Dpi.provider=google
+mvn test -Dpi.provider=openai
 
-# Run with compatibility strategy
-./tests/harness.sh --strategy compatibility
+# Set model only (pi picks the provider via fuzzy matching)
+mvn test -Dpi.model=claude-sonnet-4-5-20250514
+mvn test -Dpi.model=gemini-2.5-pro
 
-# Compare models
-./tests/harness.sh --model anthropic/sonnet --project spring-jpa-crud
-./tests/harness.sh --model google/gemini-2.5-pro --project spring-jpa-crud
-./tests/harness.sh --model openai/o3 --project spring-jpa-crud
+# Set both provider and model explicitly (recommended for CI)
+mvn test -Dpi.provider=anthropic -Dpi.model=claude-sonnet-4-5-20250514
+mvn test -Dpi.provider=google -Dpi.model=gemini-2.5-pro
+mvn test -Dpi.provider=openai -Dpi.model=gpt-4o
+mvn test -Dpi.provider=vertex-anthropic -Dpi.model=claude-sonnet-4-5@20250929
+mvn test -Dpi.provider=amazon-bedrock -Dpi.model=us.anthropic.claude-sonnet-4-20250514-v1:0
+mvn test -Dpi.provider=openrouter -Dpi.model=anthropic/claude-sonnet-4-5
+
+# Use compatibility migration strategy instead of full
+mvn test -Dpi.strategy=compatibility
+
+# Override timeout (seconds)
+mvn test -Dpi.project=spring-petclinic -Dpi.timeout=900
+
+# Combine options
+mvn test -Dpi.project=spring-jpa-crud -Dpi.provider=anthropic -Dpi.model=claude-sonnet-4-5-20250514 -Dpi.timeout=600
+```
+
+### Configuration Properties
+
+All configuration via `-D` flags:
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `pi.provider` | *(pi default)* | Provider name (e.g. `anthropic`, `google`, `openai`, `vertex-anthropic`) |
+| `pi.model` | *(pi default)* | Model ID (e.g. `claude-sonnet-4-5-20250514`, `gemini-2.5-pro`) |
+| `pi.strategy` | `full` | Migration strategy: `full` or `compatibility` |
+| `pi.timeout` | `300` | Timeout per project in seconds |
+| `pi.cmd` | `pi` | Path to pi binary (if not on PATH) |
+| `pi.project` | *(all)* | Run only this project name |
+
+You can set `pi.provider`, `pi.model`, or both:
+- **Neither** — pi uses its configured default provider and model
+- **Provider only** (`-Dpi.provider=anthropic`) — uses that provider's default model
+- **Model only** (`-Dpi.model=claude-sonnet-4-5-20250514`) — pi fuzzy-matches the provider (may be ambiguous if multiple providers offer the same model)
+- **Both** (`-Dpi.provider=anthropic -Dpi.model=claude-sonnet-4-5-20250514`) — explicit, recommended for CI
+
+### Provider and Model Names
+
+The provider and model values come from `pi --list-models` output:
+
+```
+provider          model
+anthropic         claude-sonnet-4-5-20250514
+google            gemini-2.5-pro
+openai            gpt-4o
+vertex-anthropic  claude-sonnet-4-5@20250929
+amazon-bedrock    us.anthropic.claude-sonnet-4-20250514-v1:0
+azure-openai      gpt-4o
+openrouter        anthropic/claude-sonnet-4-5
+copilot           claude-sonnet-4
+ollama            llama3
+```
+
+## What Happens During a Test Run
+
+Each test project goes through these phases:
+
+1. **Prepare** — copies local source or clones external repo into `target/workdirs/<project>/`
+2. **Migrate** — runs `pi` with the migration skill against the project (output streams to console)
+3. **Check** — runs verification checks (builds, tests pass, no Spring deps, has Quarkus, starts up)
+4. **Review** — forks the migration session and asks pi to review the skill and suggest improvements (separate session, separate cost)
+5. **Record** — appends results to `results/history.jsonl`
+
+## Test Output
+
+During the run, you'll see live-streamed output:
+
+```
+┌── turn
+│ 🤖 assistant:
+I'll migrate this Spring Boot project to Quarkus...
+│    [tokens: 5000, cost: $0.0150]
+│ 🔧 read: pom.xml
+│ 🔧 edit: pom.xml (4 edits)
+│ 🔧 bash: ./mvnw compile
+└── turn end
+```
+
+## Run Artifacts
+
+Artifacts are stored in two locations:
+
+**`target/runs/`** — run logs and reviews, named `<project>_<model>_<strategy>.*`:
+
+| File | Description |
+|------|-------------|
+| `<run>.json.log` | Raw JSON streaming output (every event from pi) |
+| `<run>.pretty.md` | Human-readable log (what you see in the console) |
+| `<run>.session.jsonl` | Pi session file (can be resumed with `pi --session <path>`) |
+| `<run>.review.md` | Skill review with improvement suggestions |
+
+Example filenames:
+```
+target/runs/
+├── spring-rest-api_claude-sonnet-4-5-20250514_full.json.log
+├── spring-rest-api_claude-sonnet-4-5-20250514_full.pretty.md
+├── spring-rest-api_claude-sonnet-4-5-20250514_full.session.jsonl
+└── spring-rest-api_claude-sonnet-4-5-20250514_full.review.md
+```
+
+**`target/workdirs/<project>/`** — the migrated project source code (pom.xml, src/, etc.)
+
+You can resume a migration session to inspect or continue:
+
+```bash
+pi --session target/runs/spring-rest-api_claude-sonnet-4-5-20250514_full.session.jsonl
 ```
 
 ## Test Projects
 
 ### In-Repo (self-contained, no external dependencies)
 
-| Project | Description | Complexity |
-|---------|-------------|-----------|
-| `spring-rest-api` | Minimal REST API with validation, no DB | Trivial |
-| `spring-jpa-crud` | JPA CRUD with H2, Spring Data, custom queries | Low |
+| Project | Description | Complexity | Checks |
+|---------|-------------|-----------|--------|
+| `spring-rest-api` | REST controller + service + validation, no DB | Trivial | builds, tests-pass, no-spring-deps, has-quarkus, starts-up |
+| `spring-jpa-crud` | CRUD with JPA, H2, Spring Data, custom queries | Low | builds, tests-pass, no-spring-deps, has-quarkus, starts-up |
 
 ### External (cloned at runtime)
 
-| Project | Description | Complexity |
-|---------|-------------|-----------|
-| `spring-petclinic` | Classic PetClinic with Thymeleaf, JPA, caching | Medium |
-| `spring-petclinic-rest` | REST-only PetClinic, no templates | Medium |
+| Project | Description | Complexity | Checks |
+|---------|-------------|-----------|--------|
+| `spring-petclinic` | Classic PetClinic with Thymeleaf, JPA, caching | Medium | builds, tests-pass, no-spring-deps, has-quarkus, starts-up, no-thymeleaf |
+| `spring-petclinic-rest` | REST-only PetClinic, no templates | Medium | builds, tests-pass, no-spring-deps, has-quarkus, starts-up |
 
 ## Checks
-
-Each project defines which checks to run in `project.yaml`:
 
 | Check | What it verifies |
 |-------|-----------------|
@@ -56,96 +257,125 @@ Each project defines which checks to run in `project.yaml`:
 | `tests-pass` | `./mvnw test` succeeds |
 | `no-spring-deps` | No `org.springframework` in `pom.xml` |
 | `has-quarkus` | `io.quarkus` present in `pom.xml` |
-| `starts-up` | App starts and responds on HTTP |
-| `no-thymeleaf` | No Thymeleaf references remain |
+| `starts-up` | App starts and responds to HTTP (port 18080) |
+| `no-thymeleaf` | No Thymeleaf references remain in code or pom |
 
-## Results
+## Results Tracking
 
-Results are appended to `tests/results/history.jsonl` — one JSON object per run:
+Results are appended to `target/runs/history.jsonl` — one JSON line per run:
 
 ```json
 {
   "project": "spring-rest-api",
-  "date": "2026-04-10T15:00:00Z",
-  "model": "anthropic/claude-sonnet-4-20250514",
+  "date": "2026-04-11T08:30:00Z",
+  "model": "vertex-anthropic/claude-sonnet-4-5@20250929",
   "strategy": "full",
   "skill": "spring-boot-to-quarkus",
-  "skill_version": "abc123",
-  "duration_seconds": 180,
-  "usage": {
-    "total_tokens": 12500,
-    "total_cost": 0.042,
-    "api_calls": 8
-  },
-  "checks": {
-    "builds": true,
-    "tests-pass": true,
-    "no-spring-deps": true,
-    "has-quarkus": true,
-    "starts-up": true
-  },
-  "score": "5/5"
+  "duration_seconds": 196,
+  "usage": {"total_tokens": 321222, "total_cost": 0.3216, "api_calls": 22},
+  "checks": {"builds": true, "tests-pass": true, "no-spring-deps": true, "has-quarkus": true, "starts-up": true},
+  "score": "5/5",
+  "review": {"tokens": 376929, "cost": 0.466, "summary": "The skill performed well..."}
 }
 ```
 
-View trends:
+Compare runs across models by grepping the history:
 
 ```bash
-./tests/results/summary.sh
+# See all runs
+cat target/runs/history.jsonl | python3 -m json.tool --json-lines
 
-# Filter by model or project
-./tests/results/summary.sh --model anthropic/sonnet
-./tests/results/summary.sh --project spring-petclinic
+# Compare scores across models
+grep '"score"' target/runs/history.jsonl
 ```
+
+All run artifacts live under `target/` and are cleaned with `mvn clean`.
+
+## HTML Report
+
+Generate a dashboard from all recorded runs:
+
+```bash
+# Generate report from default location
+./report.sh
+
+# Opens at target/runs/report.html
+open target/runs/report.html
+```
+
+The report shows:
+
+- **Summary stats** — total runs, perfect scores, tokens, cost, time
+- **Score trends** — per project/model/strategy with visual score progression (3/5 → 4/5 → 5/5)
+- **All runs detail** — expandable migration log and skill review for each run
+- **Check pass rates** — bar chart showing how often each check passes across all runs
+- **Cost comparison** — bar chart comparing costs across configurations
+
+Re-run `./report.sh` after each test to update. The report is a single self-contained HTML file with no external dependencies.
 
 ## Adding a Test Project
 
-### In-repo project
+### In-repo project (checked in, self-contained)
 
-1. Create `tests/projects/<name>/source/` with the full project source
-2. Create `tests/projects/<name>/project.yaml`:
-   ```yaml
-   name: my-project
-   description: What this project tests
-   type: spring-boot
-   skill: spring-boot-to-quarkus
-   source: local
-   timeout: 300
-   checks:
-     - builds
-     - tests-pass
-     - no-spring-deps
-     - has-quarkus
-     - starts-up
-   ```
+1. Create `tests/projects/<name>/source/` with the full Maven project
+2. Make sure it builds and tests pass as a Spring Boot / Jakarta EE app
+3. Create `tests/projects/<name>/project.yaml`:
 
-### External project
+```yaml
+name: my-project
+description: What migration patterns this tests
+type: spring-boot
+skill: spring-boot-to-quarkus
+source: local
+timeout: 300
+checks:
+  - builds
+  - tests-pass
+  - no-spring-deps
+  - has-quarkus
+  - starts-up
+```
 
-1. Create `tests/projects/<name>/project.yaml`:
-   ```yaml
-   name: my-project
-   description: What this project tests
-   type: spring-boot
-   skill: spring-boot-to-quarkus
-   source: https://github.com/org/repo
-   ref: main
-   timeout: 600
-   checks:
-     - builds
-     - tests-pass
-     - no-spring-deps
-     - has-quarkus
-   ```
+### External project (cloned from git)
 
-## Project Config Reference (`project.yaml`)
+```yaml
+name: my-external-project
+description: What migration patterns this tests
+type: spring-boot
+skill: spring-boot-to-quarkus
+source: https://github.com/org/repo
+ref: main
+timeout: 600
+checks:
+  - builds
+  - tests-pass
+  - no-spring-deps
+  - has-quarkus
+```
 
-| Field | Required | Description |
-|-------|----------|-------------|
-| `name` | Yes | Project identifier |
-| `description` | No | What migration patterns this tests |
-| `type` | Yes | `spring-boot` or `jakarta-ee` |
-| `skill` | Yes | Skill directory name to use |
-| `source` | Yes | `local` (uses `source/` subdir) or a git URL |
-| `ref` | No | Git branch/tag for external repos |
-| `timeout` | Yes | Max seconds for the migration agent |
-| `checks` | Yes | List of checks to run |
+## Troubleshooting
+
+### "No API key found" or authentication errors
+
+Make sure your provider is configured. Run `pi --list-models` — if it shows models for your provider, credentials are working.
+
+### pi hangs with no output
+
+Pi requires a pseudo-TTY. The test harness handles this via `script -q /dev/null` on macOS/Linux. If you see hangs, check that the `script` command is available.
+
+### Tests timeout
+
+Increase the timeout: `-Dpi.timeout=900`. Complex projects like petclinic may need 10-15 minutes.
+
+### Maven wrapper not found
+
+Some test projects don't ship `mvnw`. The migration agent usually creates it, but if checks fail with "mvnw not found", the agent didn't get to that step (likely timed out).
+
+### Port conflict on starts-up check
+
+The `starts-up` check uses port 18080. If another process is using it, the check will fail. Kill any stale Quarkus dev processes:
+
+```bash
+lsof -i :18080 | grep LISTEN
+kill <pid>
+```

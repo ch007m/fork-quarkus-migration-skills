@@ -2,7 +2,7 @@ name: spring-rest-api
 description: Minimal Spring Boot REST API with validation (no database)
 type: spring-boot
 skill: spring-boot-to-quarkus
-source: local  # source/ directory in this project
+source: local
 timeout: 300
 
 checks:
