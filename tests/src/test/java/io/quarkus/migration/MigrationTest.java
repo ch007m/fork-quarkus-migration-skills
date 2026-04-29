@@ -84,19 +84,17 @@ class MigrationTest {
         return System.getProperty("pi.project", "");
     }
 
-    /** Override the skill from project.yaml. Accepts a name, absolute path, or URL. */
+    /** Skill to use: a local name (looked up in skills/) or a GitHub URL. Overrides project.yaml. */
     static String piSkill() {
         return System.getProperty("pi.skill", "");
     }
 
-    /** Explicit branch when pi.skill is a URL — avoids ambiguity with slash-containing branch names. */
+    /**
+     * Explicit branch for pi.skill URLs. Only needed when the branch name contains '/' and
+     * the URL also has a subpath (e.g. tree/feature/my-branch/skills/my-skill). Ignored otherwise.
+     */
     static String piSkillBranch() {
         return System.getProperty("pi.skill.branch", "");
-    }
-
-    /** Explicit subpath within the cloned repo when pi.skill is a URL. */
-    static String piSkillPath() {
-        return System.getProperty("pi.skill.path", "");
     }
 
     // -- discover test projects --
@@ -190,7 +188,7 @@ class MigrationTest {
 
         // 2. Run pi migration agent
         String skillRef = piSkill().isEmpty() ? config.skill() : piSkill();
-        Path skillPath = skillResolver.resolve(skillRef, piSkillBranch(), piSkillPath());
+        Path skillPath = skillResolver.resolve(skillRef, piSkillBranch());
         assertTrue(Files.isDirectory(skillPath),
                 "Skill directory not found: " + skillPath);
 

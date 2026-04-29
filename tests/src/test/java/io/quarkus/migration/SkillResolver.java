@@ -11,16 +11,19 @@ import java.util.concurrent.TimeUnit;
 /**
  * Resolves a skill reference to a local directory path.
  *
- * Supported formats for the skill reference:
- *   - Skill name       → looks up in the local skills/ directory
- *   - Absolute path    → used as-is
- *   - URL              → clones the repo; branch and subpath can come from either
- *                        the URL (/tree/branch/subpath) or explicit parameters
+ * <p>Supported formats for {@code skillRef}:
+ * <ul>
+ *   <li>Skill name (e.g. {@code spring-boot-to-quarkus}) — looks up in the local skills/ directory</li>
+ *   <li>GitHub URL (e.g. {@code https://github.com/org/repo/tree/branch/subpath}) — clones and navigates</li>
+ * </ul>
  *
- * Explicit pi.skill.branch / pi.skill.path always win over URL-parsed values,
- * which avoids the ambiguity when branch names contain slashes.
+ * <p>Branch disambiguation: GitHub URLs are parsed by splitting on the first {@code /} after
+ * {@code /tree/}, which fails when the branch name itself contains a {@code /} and there is also
+ * a subpath (e.g. {@code tree/feature/my-branch/skills/my-skill}). In that case pass the branch
+ * name explicitly via {@code explicitBranch} and the subpath will be derived from the URL.
  *
- * Remote clones are cached in downloadDir for the duration of the test run.
+ * <p>Remote clones are cached in {@code downloadDir} for the duration of the test run
+ * and cleaned up with {@code mvn clean}.
  */
 public class SkillResolver {
 
@@ -34,17 +37,17 @@ public class SkillResolver {
     }
 
     /**
-     * Resolve with optional explicit branch and subpath overrides.
-     * For URLs: explicit values take precedence over anything parsed from the URL.
+     * @param skillRef      skill name or GitHub URL
+     * @param explicitBranch optional branch override — only needed when the branch name contains
+     *                       {@code /} and the URL also has a subpath; ignored otherwise
      */
-    public Path resolve(String skillRef, String explicitBranch, String explicitPath)
-            throws IOException, InterruptedException {
+    public Path resolve(String skillRef, String explicitBranch) throws IOException, InterruptedException {
         if (skillRef == null || skillRef.isBlank()) {
             throw new IllegalArgumentException("Skill reference cannot be empty");
         }
 
         if (isUrl(skillRef)) {
-            return resolveFromUrl(skillRef, blankToNull(explicitBranch), blankToNull(explicitPath));
+            return resolveFromUrl(skillRef, blankToNull(explicitBranch));
         }
 
         Path p = Path.of(skillRef);
@@ -55,38 +58,40 @@ public class SkillResolver {
         return skillsBaseDir.resolve(skillRef);
     }
 
-    private Path resolveFromUrl(String url, String explicitBranch, String explicitPath)
-            throws IOException, InterruptedException {
-
-        String cacheKey = url + "|" + nullToEmpty(explicitBranch) + "|" + nullToEmpty(explicitPath);
+    private Path resolveFromUrl(String url, String explicitBranch) throws IOException, InterruptedException {
+        String cacheKey = url + "|" + nullToEmpty(explicitBranch);
         if (cache.containsKey(cacheKey)) {
             System.out.println("  Using cached skill: " + cache.get(cacheKey));
             return cache.get(cacheKey);
         }
 
-        // Parse /tree/branch[/subpath] from GitHub-style URLs
         String cloneUrl = url;
-        String parsedBranch = null;
-        String parsedSubPath = "";
+        String branch = null;
+        String subPath = "";
 
         if (url.contains("/tree/")) {
             int treeIdx = url.indexOf("/tree/");
             cloneUrl = url.substring(0, treeIdx);
             String rest = url.substring(treeIdx + "/tree/".length()); // "branch[/subpath]"
-            int slashIdx = rest.indexOf('/');
-            if (slashIdx >= 0) {
-                parsedBranch = rest.substring(0, slashIdx);
-                parsedSubPath = rest.substring(slashIdx + 1);
+
+            if (explicitBranch != null) {
+                // Derive subpath from URL using the known branch name
+                branch = explicitBranch;
+                subPath = rest.startsWith(explicitBranch + "/")
+                        ? rest.substring(explicitBranch.length() + 1)
+                        : "";
             } else {
-                parsedBranch = rest;
+                // Best-effort: split on first '/' — ambiguous when branch contains '/'
+                int slashIdx = rest.indexOf('/');
+                if (slashIdx >= 0) {
+                    branch = rest.substring(0, slashIdx);
+                    subPath = rest.substring(slashIdx + 1);
+                } else {
+                    branch = rest;
+                }
             }
         }
 
-        // Explicit params win over URL-parsed values
-        String branch = explicitBranch != null ? explicitBranch : parsedBranch;
-        String subPath = explicitPath  != null ? explicitPath  : parsedSubPath;
-
-        // Include branch in dir name to avoid clashes between branches of the same repo
         String dirKey = cloneUrl + (branch != null ? "@" + branch : "");
         String dirName = dirKey.replaceAll("[^a-zA-Z0-9._-]", "_");
         Path cloneDir = downloadDir.resolve(dirName);
@@ -120,7 +125,7 @@ public class SkillResolver {
                     "Skill path not found: " + skillPath + "\n" +
                     "  The repo was cloned to: " + cloneDir + "\n" +
                     "  Available directories with SKILL.md: " + available + "\n" +
-                    "  Tip: use -Dpi.skill.branch and -Dpi.skill.path to set these explicitly.");
+                    "  Tip: if your branch name contains '/', use -Dpi.skill.branch=<branch>.");
         }
 
         cache.put(cacheKey, skillPath);
