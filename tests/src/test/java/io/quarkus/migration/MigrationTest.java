@@ -2,6 +2,8 @@ package io.quarkus.migration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.quarkus.migration.runner.AgentRunner;
+import io.quarkus.migration.runner.OpenCodeRunner;
 import io.quarkus.migration.runner.PiRunner;
 import org.junit.jupiter.api.*;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -21,11 +23,11 @@ import static org.junit.jupiter.api.Assertions.*;
  *
  * <p>Configuration via system properties:
  * <ul>
- *   <li>{@code pi.model} — model to use (default: vertex-anthropic/claude-sonnet-4-5@20250929)</li>
- *   <li>{@code pi.strategy} — migration strategy: full or compatibility (default: full)</li>
- *   <li>{@code pi.timeout} — timeout in seconds per project (default: 300)</li>
+ *   <li>{@code ai.model} — model to use (default: vertex-anthropic/claude-sonnet-4-5@20250929)</li>
+ *   <li>{@code ai.strategy} — migration strategy: full or compatibility (default: full)</li>
+ *   <li>{@code ai.timeout} — timeout in seconds per project (default: 300)</li>
  *   <li>{@code ai.cmd} — path to pi binary (default: pi)</li>
- *   <li>{@code pi.project} — run only this project (default: all)</li>
+ *   <li>{@code ai.project} — run only this project (default: all)</li>
  * </ul>
  *
  * <p>Usage:
@@ -34,11 +36,11 @@ import static org.junit.jupiter.api.Assertions.*;
  * mvn test
  *
  * # Run specific project
- * mvn test -Dpi.project=spring-rest-api
+ * mvn test -Dai.project=spring-rest-api
  *
  * # Compare models
- * mvn test -Dpi.model=vertex-anthropic/claude-sonnet-4-5@20250929
- * mvn test -Dpi.model=google/gemini-2.5-pro
+ * mvn test -Dai.model=vertex-anthropic/claude-sonnet-4-5@20250929
+ * mvn test -Dai.model=google/gemini-2.5-pro
  * </pre>
  */
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
@@ -52,7 +54,7 @@ class MigrationTest {
     // -- config from system properties --
 
     static String aiProvider() {
-        return System.getProperty("pi.provider", "");
+        return System.getProperty("ai.provider", "");
     }
 
     static String aiModel() {
@@ -60,7 +62,7 @@ class MigrationTest {
     }
 
     /** Display string for the provider/model combination. */
-    static String piModelDisplay() {
+    static String aiModelDisplay() {
         String p = aiProvider();
         String m = aiModel();
         if (!p.isEmpty() && !m.isEmpty()) return p + "/" + m;
@@ -69,11 +71,11 @@ class MigrationTest {
         return "(pi default)";
     }
 
-    static String piStrategy() {
+    static String aiStrategy() {
         return System.getProperty("ai.strategy", "full");
     }
 
-    static int piTimeout() {
+    static int aiTimeout() {
         return Integer.parseInt(System.getProperty("ai.timeout", "300"));
     }
 
@@ -81,20 +83,24 @@ class MigrationTest {
         return System.getProperty("ai.cmd", "pi");
     }
 
-    static String piProject() {
+    static String aiPrompt() {
+        return System.getProperty("ai.prompt", "");
+    }
+
+    static String aiProject() {
         return System.getProperty("ai.project", "");
     }
 
     /** Skill to use: a local name (looked up in skills/) or a GitHub URL. Overrides project.yaml. */
-    static String piSkill() {
+    static String aiSkill() {
         return System.getProperty("ai.skill", "");
     }
 
     /**
-     * Explicit branch for ai.skill URLs. Only needed when the branch name contains '/' and
+     * Github branch containing part of its name "/" when we get the skill from a URL and
      * the URL also has a subpath (e.g. tree/feature/my-branch/skills/my-skill). Ignored otherwise.
      */
-    static String piSkillBranch() {
+    static String aiSkillBranch() {
         return System.getProperty("ai.skill.branch", "");
     }
 
@@ -132,7 +138,7 @@ class MigrationTest {
 
     static Stream<Arguments> migrationProjects() throws IOException {
         Path projects = projectsDir();
-        String filter = piProject();
+        String filter = aiProject();
 
         try (var dirs = Files.list(projects)) {
             return dirs
@@ -165,8 +171,8 @@ class MigrationTest {
         System.out.println("PROJECT: " + config.name());
         System.out.println("  provider: " + (aiProvider().isEmpty() ? "(default)" : aiProvider()));
         System.out.println("  model:    " + (aiModel().isEmpty() ? "(default)" : aiModel()));
-        System.out.println("  strategy: " + piStrategy());
-        System.out.println("  timeout:  " + piTimeout() + "s");
+        System.out.println("  strategy: " + aiStrategy());
+        System.out.println("  timeout:  " + aiTimeout() + "s");
         System.out.println("  checks:   " + config.checks());
         System.out.println("=".repeat(60));
 
@@ -176,30 +182,31 @@ class MigrationTest {
         // Build a run name: project_provider_model_strategy
         String providerShort = aiProvider().isEmpty() ? "default" : aiProvider().replaceAll("[^a-zA-Z0-9-]", "-");
         String modelShort = aiModel().isEmpty() ? "default" : aiModel().replaceAll("[^a-zA-Z0-9-]", "-");
-        String runName = config.name() + "_" + providerShort + "_" + modelShort + "_" + piStrategy();
+        String runName = config.name() + "_" + providerShort + "_" + modelShort + "_" + aiStrategy();
         Path outputDir = Path.of("target", "runs").toAbsolutePath();
 
         System.out.println("  workdir:  " + workDir);
         System.out.println("  outputs:  " + outputDir.resolve(runName + ".*"));
 
         MigrationResult result = new MigrationResult(
-                config.name(), piModelDisplay(), piStrategy(), config.skill());
+                config.name(), aiModelDisplay(), aiStrategy(), config.skill());
         result.setWorkDir(workDir.toString());
         result.setRunName(runName);
 
-        // 2. Run pi migration agent
-        String skillRef = piSkill().isEmpty() ? config.skill() : piSkill();
-        Path skillPath = skillResolver.resolve(skillRef, piSkillBranch());
+        // 2. Run the migration agent
+        String skillRef = aiSkill().isEmpty() ? config.skill() : aiSkill();
+        Path skillPath = skillResolver.resolve(skillRef, aiSkillBranch());
         assertTrue(Files.isDirectory(skillPath),
                 "Skill directory not found: " + skillPath);
 
-        int timeout = config.timeout() > 0 ? config.timeout() : piTimeout();
-        PiRunner runner = new PiRunner(aiCmd(), aiProvider(), aiModel(), skillPath, piStrategy(), timeout);
+        int timeout = config.timeout() > 0 ? config.timeout() : aiTimeout();
+        //PiRunner runner = new PiRunner(aiCmd(), aiProvider(), aiModel(), skillPath, aiStrategy(), timeout, aiPrompt());
+        OpenCodeRunner runner = new OpenCodeRunner(aiCmd(), aiProvider(), aiModel(), skillPath, aiStrategy(), timeout, aiPrompt());
 
-        System.out.println("  Running migration agent...");
-        PiRunner.RunOutput output = runner.run(workDir, outputDir, runName);
+        System.out.printf("  Running migration agent: %s ...%n",aiCmd());
+        AgentRunner.RunOutput output = runner.run(workDir, outputDir, runName);
 
-        result.setPiExitCode(output.exitCode());
+        result.setAiExitCode(output.exitCode());
         result.setDuration(output.duration());
         result.setSessionFile(output.sessionFile());
 

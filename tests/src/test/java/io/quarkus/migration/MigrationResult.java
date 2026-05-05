@@ -22,7 +22,7 @@ public class MigrationResult {
     private String sessionFile;
     private String workDir;
     private String runName;
-    private int piExitCode;
+    private int aiExitCode;
     private String review;
     private long reviewTokens;
     private double reviewCost;
@@ -89,8 +89,8 @@ public class MigrationResult {
     public String getRunName() { return runName; }
     public void setRunName(String runName) { this.runName = runName; }
 
-    public int getPiExitCode() { return piExitCode; }
-    public void setPiExitCode(int piExitCode) { this.piExitCode = piExitCode; }
+    public int getAiExitCode() { return aiExitCode; }
+    public void setAiExitCode(int aiExitCode) { this.aiExitCode = aiExitCode; }
 
     public String getReview() { return review; }
     public void setReview(String review) { this.review = review; }

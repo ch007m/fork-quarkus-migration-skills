@@ -18,8 +18,8 @@ public class PiRunner extends AbstractRunner implements AgentRunner {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    public PiRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds) {
-        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds);
+    public PiRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds, String prompt) {
+        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt);
     }
 
     /**

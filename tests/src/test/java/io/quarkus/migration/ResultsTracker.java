@@ -55,7 +55,7 @@ public class ResultsTracker {
         result.getChecks().forEach(checks::put);
 
         node.put("score", result.score());
-        node.put("pi_exit_code", result.getPiExitCode());
+        node.put("ai_exit_code", result.getAiExitCode());
         node.put("run_name", result.getRunName());
         node.put("workdir", result.getWorkDir());
 
