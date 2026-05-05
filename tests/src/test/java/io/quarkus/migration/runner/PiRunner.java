@@ -1,4 +1,4 @@
-package io.quarkus.migration;
+package io.quarkus.migration.runner;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,28 +14,16 @@ import java.util.concurrent.*;
  * Runs the pi coding agent against a project directory with a migration skill.
  * Uses --mode json for structured streaming output.
  */
-public class PiRunner {
+public class PiRunner extends AbstractRunner implements AgentRunner {
 
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    private final String piCmd;
-    private final String provider;
-    private final String model;
-    private final Path skillPath;
-    private final String strategy;
-    private final int timeoutSeconds;
-
-    public PiRunner(String piCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds) {
-        this.piCmd = piCmd;
-        this.provider = provider;
-        this.model = model;
-        this.skillPath = skillPath;
-        this.strategy = strategy;
-        this.timeoutSeconds = timeoutSeconds;
+    public PiRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds) {
+        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds);
     }
 
     /**
-     * Run the migration agent against the given project directory.
+     * Run the migration pi agent against the given project directory.
      * Streams structured JSON output to console in real-time.
      *
      * @param projectDir the project to migrate (pi works in this directory)
@@ -46,20 +34,10 @@ public class PiRunner {
         Files.createDirectories(outputDir);
         Path sessionDir = Files.createTempDirectory("pi-session-");
 
-        String prompt = """
-                Migrate this Spring Boot project to Quarkus using the %s migration strategy. \
-                Work entirely within this directory. \
-                Do a full migration — convert all source files, build files, config, and tests. \
-                After migration, verify the project compiles with ./mvnw compile and fix any errors. \
-                Then run ./mvnw test and fix any test failures.
-                If you need to delete code or files, explain why you are deleting them and what you are replacing them with.
-                If anything could not be converted/migrated explain why - do not just delete/remove it without explaining.
-                Include a summary of the migration in the end of the output.""".formatted(strategy);
-
         List<String> cmd = new ArrayList<>();
         // Pi requires a pseudo-TTY — use `script -q /dev/null` to provide one
         cmd.addAll(List.of("script", "-q", "/dev/null"));
-        cmd.add(piCmd);
+        cmd.add(aiCmd);
         cmd.add("--print");
         cmd.add("--mode");
         cmd.add("json");
@@ -439,20 +417,4 @@ public class PiRunner {
 
         return new ReviewOutput(review, reviewUsage);
     }
-
-    /** Add --provider and/or --model args to the command. Either or both can be set. */
-    private void addModelArgs(List<String> cmd) {
-        if (provider != null && !provider.isBlank()) {
-            cmd.add("--provider");
-            cmd.add(provider);
-        }
-        if (model != null && !model.isBlank()) {
-            cmd.add("--model");
-            cmd.add(model);
-        }
-    }
-
-    public record RunOutput(int exitCode, Duration duration, String sessionFile, String logFile) {}
-    public record UsageStats(long totalTokens, double totalCost, int apiCalls, String actualModel) {}
-    public record ReviewOutput(String review, UsageStats usage) {}
 }
