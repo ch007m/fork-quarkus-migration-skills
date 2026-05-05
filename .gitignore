@@ -11,3 +11,6 @@
 
 # Pi sessions
 .pi/agent/sessions/
+
+# Claude Code
+**/CLAUDE.md
