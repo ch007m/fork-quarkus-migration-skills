@@ -25,20 +25,6 @@ public class OpenCodeRunner extends AbstractRunner implements AgentRunner {
         super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt);
     }
 
-    @Override
-    void addModelArgs(List<String> cmd) {
-        boolean hasProvider = provider != null && !provider.isBlank();
-        boolean hasModel = model != null && !model.isBlank();
-
-        if (hasProvider && hasModel) {
-            cmd.add("-m");
-            cmd.add(provider + "/" + model);
-        } else if (hasModel) {
-            cmd.add("-m");
-            cmd.add(model);
-        }
-    }
-
     /**
      * Run the opencode agent against the given project directory. Streams structured JSON output to console in
      * real-time.
@@ -159,8 +145,62 @@ public class OpenCodeRunner extends AbstractRunner implements AgentRunner {
     }
 
     @Override
+    public AgentRunner.UsageStats extractUsage(List<String> sessionFiles) {
+        if (sessionFiles == null) {
+            return new AgentRunner.UsageStats(0, 0.0, 0, "unknown");
+        }
+
+        long totalTokens = 0;
+        double totalCost = 0.0;
+        int apiCalls = 0;
+        String actualModel = "unknown";
+
+        for (String sessionFile : sessionFiles) {
+            if (sessionFile == null) {
+                continue;
+            }
+            try {
+                JsonNode root = JSON.readTree(Files.readString(Path.of(sessionFile)));
+                JsonNode messages = root.path("messages");
+                for (JsonNode message : messages) {
+                    JsonNode info = message.path("info");
+                    if ("assistant".equals(info.path("role").asText())) {
+                        totalTokens += info.path("tokens").path("total").asLong(0);
+                        totalCost += info.path("cost").asDouble(0.0);
+                        apiCalls++;
+
+                        if ("unknown".equals(actualModel)) {
+                            String provider = info.path("providerID").asText("?");
+                            String m = info.path("modelID").asText("?");
+                            actualModel = provider + "/" + m;
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                // session file not found or unreadable
+            }
+        }
+
+        return new AgentRunner.UsageStats(totalTokens, totalCost, apiCalls, actualModel);
+    }
+
+    @Override
     public ReviewOutput review(String sessionFile, Path projectDir, Path outputDir, String runName, Path skillPath,
             Map<String, Boolean> checkResults) {
         return null;
+    }
+
+    @Override
+    void addModelArgs(List<String> cmd) {
+        boolean hasProvider = provider != null && !provider.isBlank();
+        boolean hasModel = model != null && !model.isBlank();
+
+        if (hasProvider && hasModel) {
+            cmd.add("-m");
+            cmd.add(provider + "/" + model);
+        } else if (hasModel) {
+            cmd.add("-m");
+            cmd.add(model);
+        }
     }
 }

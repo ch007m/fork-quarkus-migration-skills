@@ -21,6 +21,52 @@ public class PiRunner extends AbstractRunner implements AgentRunner {
     }
 
     @Override
+    public AgentRunner.UsageStats extractUsage(List<String> sessionFiles) {
+        if (sessionFiles == null) {
+            return new AgentRunner.UsageStats(0, 0.0, 0, "unknown");
+        }
+
+        long totalTokens = 0;
+        double totalCost = 0.0;
+        int apiCalls = 0;
+        String actualModel = "unknown";
+
+        for (String sessionFile : sessionFiles) {
+            if (sessionFile == null) {
+                continue;
+            }
+            try (var reader = new BufferedReader(new FileReader(sessionFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    try {
+                        JsonNode entry = JSON.readTree(line);
+                        if ("message".equals(entry.path("type").asText())) {
+                            JsonNode msg = entry.path("message");
+                            if ("assistant".equals(msg.path("role").asText())) {
+                                JsonNode usage = msg.path("usage");
+                                totalTokens += usage.path("totalTokens").asLong(0);
+                                totalCost += usage.path("cost").path("total").asDouble(0.0);
+                                apiCalls++;
+
+                                if ("unknown".equals(actualModel)) {
+                                    String provider = msg.path("provider").asText("?");
+                                    String m = msg.path("model").asText("?");
+                                    actualModel = provider + "/" + m;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            } catch (IOException e) {
+                // session file not found or unreadable
+            }
+        }
+
+        return new AgentRunner.UsageStats(totalTokens, totalCost, apiCalls, actualModel);
+    }
+
+    @Override
     void addModelArgs(List<String> cmd) {
         boolean hasProvider = provider != null && !provider.isBlank();
         boolean hasModel = model != null && !model.isBlank();

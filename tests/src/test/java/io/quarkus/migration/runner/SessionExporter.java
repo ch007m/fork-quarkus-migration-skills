@@ -99,7 +99,7 @@ public class SessionExporter {
         cmd.add("opencode");
         cmd.add("export");
         cmd.add(sessionId);
-        cmd.add("--sanitize");
+        //cmd.add("--sanitize");
         ProcessBuilder exportBuilder = new ProcessBuilder(cmd);
 
         try {

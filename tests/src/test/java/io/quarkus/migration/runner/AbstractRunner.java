@@ -3,9 +3,7 @@ package io.quarkus.migration.runner;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.io.BufferedReader;
 import java.io.BufferedWriter;
-import java.io.FileReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,48 +38,9 @@ public abstract class AbstractRunner {
     abstract void addModelArgs(List<String> cmd);
 
     /**
-     * Parse an ai session JSONL file to extract token usage and cost.
+     * Parse ai session JSONL files to extract token usage and cost.
      */
-    public AgentRunner.UsageStats extractUsage(List<String> sessionFile) {
-        if (sessionFile == null) {
-            return new AgentRunner.UsageStats(0, 0.0, 0, "unknown");
-        }
-
-        long totalTokens = 0;
-        double totalCost = 0.0;
-        int apiCalls = 0;
-        String actualModel = "unknown";
-
-        //TODO: iterate through the list !!!
-        try (var reader = new BufferedReader(new FileReader(sessionFile.getFirst()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                try {
-                    JsonNode entry = JSON.readTree(line);
-                    if ("message".equals(entry.path("type").asText())) {
-                        JsonNode msg = entry.path("message");
-                        if ("assistant".equals(msg.path("role").asText())) {
-                            JsonNode usage = msg.path("usage");
-                            totalTokens += usage.path("totalTokens").asLong(0);
-                            totalCost += usage.path("cost").path("total").asDouble(0.0);
-                            apiCalls++;
-
-                            if ("unknown".equals(actualModel)) {
-                                String provider = msg.path("provider").asText("?");
-                                String m = msg.path("model").asText("?");
-                                actualModel = provider + "/" + m;
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        } catch (IOException e) {
-            // session file not found or unreadable
-        }
-
-        return new AgentRunner.UsageStats(totalTokens, totalCost, apiCalls, actualModel);
-    }
+    public abstract AgentRunner.UsageStats extractUsage(List<String> sessionFiles);
 
     public void copySkills(Path source, Path target) throws IOException {
         // Use try-with-resources to auto-close the stream
