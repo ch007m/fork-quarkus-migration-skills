@@ -9,6 +9,7 @@
 # OS
 .DS_Store
 
-# AI sessions
+# AI stuffs
 .pi/agent/sessions/
 .opencode
+**/CLAUDE.md
