@@ -187,7 +187,7 @@ class MigrationTest {
         System.out.println("  workdir:  " + workDir);
         System.out.println("  outputs:  " + outputDir.resolve(runName + ".*"));
 
-        MigrationResult result = new MigrationResult(
+        MigrationResult result = new MigrationResult(aiCmd(),
                 config.name(), aiModelDisplay(), aiStrategy(), config.skill());
         result.setWorkDir(workDir.toString());
         result.setRunName(runName);

@@ -10,6 +10,7 @@ import java.util.Map;
  * Captures the full result of a migration test run.
  */
 public class MigrationResult {
+    private final String agent;
     private final String project;
     private final String model;
     private final String strategy;
@@ -28,7 +29,8 @@ public class MigrationResult {
     private long reviewTokens;
     private double reviewCost;
 
-    public MigrationResult(String project, String model, String strategy, String skill) {
+    public MigrationResult(String agent, String project, String model, String strategy, String skill) {
+        this.agent = agent;
         this.project = project;
         this.model = model;
         this.strategy = strategy;
@@ -112,6 +114,7 @@ public class MigrationResult {
     public String toString() {
         var sb = new StringBuilder();
         sb.append("Migration Result: %s [%s]\n".formatted(project, score()));
+        sb.append("  agent:    %s\n".formatted(agent));
         sb.append("  model:    %s\n".formatted(model));
         sb.append("  strategy: %s\n".formatted(strategy));
         sb.append("  duration: %ds\n".formatted(getDuration().toSeconds()));

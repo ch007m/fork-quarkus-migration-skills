@@ -44,6 +44,10 @@ public class OpenCodeRunner extends AbstractRunner implements AgentRunner {
         Files.createDirectories(projectSkillsPath);
         copySkills(skillPath, projectSkillsPath);
 
+        // Create the configuration file with:
+        // permissions: allow
+        writeOpenCodeConfiguration();
+
         // Use the user's prompt or the one to be used for the migration test
         var userPrompt = prompt.isEmpty() ? generateMigrationPrompt() : prompt;
 
