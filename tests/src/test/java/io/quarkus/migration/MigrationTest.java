@@ -187,14 +187,20 @@ class MigrationTest {
         System.out.println("  workdir:  " + workDir);
         System.out.println("  outputs:  " + outputDir.resolve(runName + ".*"));
 
+        // 2. Resolve the skill
+        String skillRefStr = aiSkill().isEmpty() ? config.skill() : aiSkill();
+        Path skillPath = skillResolver.resolve(skillRefStr, aiSkillBranch());
+
+        boolean isUrl = skillRefStr.startsWith("https://") || skillRefStr.startsWith("http://") || skillRefStr.startsWith("git@");
+        SkillReference skillRef = new SkillReference(
+                config.skill(),
+                isUrl ? skillRefStr : null,
+                skillPath.toString());
+
         MigrationResult result = new MigrationResult(aiCmd(),
-                config.name(), aiModelDisplay(), aiStrategy(), config.skill());
+                config.name(), aiModelDisplay(), aiStrategy(), skillRef);
         result.setWorkDir(workDir.toString());
         result.setRunName(runName);
-
-        // 2. Run the migration agent
-        String skillRef = aiSkill().isEmpty() ? config.skill() : aiSkill();
-        Path skillPath = skillResolver.resolve(skillRef, aiSkillBranch());
         assertTrue(Files.isDirectory(skillPath),
                 "Skill directory not found: " + skillPath);
 

@@ -44,6 +44,13 @@ public class ResultsTracker {
         node.put("model", result.getModel());
         node.put("strategy", result.getStrategy());
         node.put("skill", result.getSkill());
+        SkillReference ref = result.getSkillRef();
+        ObjectNode skillNode = node.putObject("skill_ref");
+        skillNode.put("name", ref.name());
+        if (ref.url() != null) {
+            skillNode.put("url", ref.url());
+        }
+        skillNode.put("local_path", ref.localPath());
         node.put("duration_seconds", result.getDuration().toSeconds());
 
         ObjectNode usage = node.putObject("usage");

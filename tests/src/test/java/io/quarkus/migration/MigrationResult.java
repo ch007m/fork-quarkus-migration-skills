@@ -14,7 +14,7 @@ public class MigrationResult {
     private final String project;
     private final String model;
     private final String strategy;
-    private final String skill;
+    private final SkillReference skillRef;
     private final Instant timestamp;
     private final Duration duration;
     private final Map<String, Boolean> checks = new LinkedHashMap<>();
@@ -29,12 +29,12 @@ public class MigrationResult {
     private long reviewTokens;
     private double reviewCost;
 
-    public MigrationResult(String agent, String project, String model, String strategy, String skill) {
+    public MigrationResult(String agent, String project, String model, String strategy, SkillReference skillRef) {
         this.agent = agent;
         this.project = project;
         this.model = model;
         this.strategy = strategy;
-        this.skill = skill;
+        this.skillRef = skillRef;
         this.timestamp = Instant.now();
         this.duration = Duration.ZERO;
     }
@@ -107,7 +107,8 @@ public class MigrationResult {
     public String getProject() { return project; }
     public String getModel() { return model; }
     public String getStrategy() { return strategy; }
-    public String getSkill() { return skill; }
+    public String getSkill() { return skillRef.name(); }
+    public SkillReference getSkillRef() { return skillRef; }
     public Instant getTimestamp() { return timestamp; }
 
     @Override
@@ -117,6 +118,11 @@ public class MigrationResult {
         sb.append("  agent:    %s\n".formatted(agent));
         sb.append("  model:    %s\n".formatted(model));
         sb.append("  strategy: %s\n".formatted(strategy));
+        sb.append("  skill:    %s\n".formatted(skillRef.name()));
+        if (skillRef.isRemote()) {
+            sb.append("  skill-url: %s\n".formatted(skillRef.url()));
+        }
+        sb.append("  skill-path: %s\n".formatted(skillRef.localPath()));
         sb.append("  duration: %ds\n".formatted(getDuration().toSeconds()));
         sb.append("  tokens:   %d\n".formatted(totalTokens));
         sb.append("  cost:     $%.4f\n".formatted(totalCost));
