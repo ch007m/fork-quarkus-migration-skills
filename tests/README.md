@@ -159,6 +159,7 @@ All configuration via `-D` flags:
 | `ai.project` | *(all)* | Run only this project name |
 | `ai.skill` | *(from project.yaml)* | Skill to use: a local name (e.g. `spring-boot-to-quarkus`) or a GitHub URL |
 | `ai.skill.branch` | *(parsed from URL)* | Explicit branch — only needed when the branch name contains `/` and the URL has a subpath |
+| `ai.sanitize` | `false` | When `true`, pass `--sanitize` to strip sensitive content from exported opencode sessions |
 
 ### Selecting a skill
 

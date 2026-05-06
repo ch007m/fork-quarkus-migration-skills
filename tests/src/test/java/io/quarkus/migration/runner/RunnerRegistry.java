@@ -11,7 +11,7 @@ public enum RunnerRegistry {
     @FunctionalInterface
     interface RunnerFactory {
         AgentRunner create(String aiCmd, String provider, String model,
-                           Path skillPath, String strategy, int timeoutSeconds, String prompt);
+                           Path skillPath, String strategy, int timeoutSeconds, String prompt, boolean sanitize);
     }
 
     private final String key;
@@ -33,7 +33,7 @@ public enum RunnerRegistry {
 
     // Factory method
     public static AgentRunner getRunner(String aiCmd, String provider, String model,
-                                        Path skillPath, String strategy, int timeoutSeconds, String prompt) {
+                                        Path skillPath, String strategy, int timeoutSeconds, String prompt, boolean sanitize) {
         if (aiCmd == null) {
             throw new IllegalArgumentException("aiCmd cannot be null");
         }
@@ -41,6 +41,6 @@ public enum RunnerRegistry {
         if (registry == null) {
             throw new IllegalArgumentException("No runner registered for the agent: " + aiCmd);
         }
-        return registry.factory.create(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt);
+        return registry.factory.create(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt, sanitize);
     }
 }

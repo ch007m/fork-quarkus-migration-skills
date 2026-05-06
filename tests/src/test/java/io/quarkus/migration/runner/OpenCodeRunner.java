@@ -21,8 +21,8 @@ import static io.quarkus.migration.runner.SessionExporter.exportSessions;
 public class OpenCodeRunner extends AbstractRunner implements AgentRunner {
 
     public OpenCodeRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds,
-            String prompt) {
-        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt);
+            String prompt, boolean sanitize) {
+        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt, sanitize);
     }
 
     /**
@@ -142,7 +142,7 @@ public class OpenCodeRunner extends AbstractRunner implements AgentRunner {
             printBoth(summary, prettyWriter);
 
             // Find the session files matching the title id and export them
-            var sessionFiles = exportSessions(runName, outputDir);
+            var sessionFiles = exportSessions(runName, outputDir, sanitize);
 
             return new RunOutput(exitCode, duration, sessionFiles, logFile.toString());
         }

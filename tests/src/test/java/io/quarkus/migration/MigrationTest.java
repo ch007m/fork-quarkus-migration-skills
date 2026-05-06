@@ -103,6 +103,11 @@ class MigrationTest {
         return System.getProperty("ai.skill.branch", "");
     }
 
+    /** Whether to pass --sanitize when exporting opencode sessions. Default: false. */
+    static boolean aiSanitize() {
+        return Boolean.parseBoolean(System.getProperty("ai.sanitize", "false"));
+    }
+
     // -- discover test projects --
 
     static Path repoRoot() {
@@ -207,7 +212,7 @@ class MigrationTest {
         int timeout = config.timeout() > 0 ? config.timeout() : aiTimeout();
 
         // Select the agent from the Registry
-        AgentRunner runner = RunnerRegistry.getRunner(aiCmd(), aiProvider(), aiModel(), skillPath, aiStrategy(), timeout, aiPrompt());
+        AgentRunner runner = RunnerRegistry.getRunner(aiCmd(), aiProvider(), aiModel(), skillPath, aiStrategy(), timeout, aiPrompt(), aiSanitize());
 
         System.out.printf("  Running migration agent: %s ...%n",aiCmd());
         AgentRunner.RunOutput output = runner.run(workDir, outputDir, runName);

@@ -16,8 +16,8 @@ import java.util.concurrent.*;
  */
 public class PiRunner extends AbstractRunner implements AgentRunner {
 
-    public PiRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds, String prompt) {
-        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt);
+    public PiRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds, String prompt, boolean sanitize) {
+        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt, sanitize);
     }
 
     @Override

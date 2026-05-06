@@ -55,14 +55,15 @@ public class SessionExporter {
     }
 
     /**
-     * Finds all sessions matching a title, exports them using the sanitize flag,
-     * and writes the output stream directly into a target folder.
+     * Finds all sessions matching a title, exports them, and writes the output
+     * stream directly into a target folder.
      *
      * @param targetTitle  The project title to filter by (e.g., "project_001")
      * @param outputDir   The directory path where the session files will be saved
+     * @param sanitize    When {@code true}, pass {@code --sanitize} to strip sensitive content from exported sessions
      * @return the list of the session files
      */
-    public static List<String> exportSessions(String targetTitle, Path outputDir) {
+    public static List<String> exportSessions(String targetTitle, Path outputDir, boolean sanitize) {
         List<String> sessionFiles = new ArrayList<>();
         try {
             System.out.println("Fetching the session list using the title id: " + targetTitle);
@@ -79,7 +80,7 @@ public class SessionExporter {
             System.out.println("Starting to export them ...");
 
             for (String sessionId : sessionIds) {
-                sessionFiles.add(logSessionContent(sessionId, outputDir));
+                sessionFiles.add(logSessionContent(sessionId, outputDir, sanitize));
             }
 
             System.out.println("Successfully processed all exports.");
@@ -91,15 +92,16 @@ public class SessionExporter {
         return sessionFiles;
     }
 
-    private static String logSessionContent(String sessionId, Path outputDir) {
+    private static String logSessionContent(String sessionId, Path outputDir, boolean sanitize) {
         File sessionFile = outputDir.resolve(sessionId + ".session.jsonl").toFile();
 
-        // Build: opencode export <session_ID> --sanitize
         List<String> cmd = new ArrayList<>();
         cmd.add("opencode");
         cmd.add("export");
         cmd.add(sessionId);
-        //cmd.add("--sanitize");
+        if (sanitize) {
+            cmd.add("--sanitize");
+        }
         ProcessBuilder exportBuilder = new ProcessBuilder(cmd);
 
         try {
