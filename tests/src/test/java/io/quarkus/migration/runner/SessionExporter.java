@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-public class SessionExporter {
+public class OpenCodeSessionExporter {
 
     private static final ObjectMapper objectMapper = new ObjectMapper();
 
