@@ -3,35 +3,38 @@ package io.quarkus.migration;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
  * Captures the full result of a migration test run.
  */
 public class MigrationResult {
+    private final String agent;
     private final String project;
     private final String model;
     private final String strategy;
-    private final String skill;
+    private final SkillReference skillRef;
     private final Instant timestamp;
     private final Duration duration;
     private final Map<String, Boolean> checks = new LinkedHashMap<>();
     private long totalTokens;
     private double totalCost;
     private int apiCalls;
-    private String sessionFile;
+    private List<String> sessionFiles;
     private String workDir;
     private String runName;
-    private int piExitCode;
+    private int aiExitCode;
     private String review;
     private long reviewTokens;
     private double reviewCost;
 
-    public MigrationResult(String project, String model, String strategy, String skill) {
+    public MigrationResult(String agent, String project, String model, String strategy, SkillReference skillRef) {
+        this.agent = agent;
         this.project = project;
         this.model = model;
         this.strategy = strategy;
-        this.skill = skill;
+        this.skillRef = skillRef;
         this.timestamp = Instant.now();
         this.duration = Duration.ZERO;
     }
@@ -80,8 +83,8 @@ public class MigrationResult {
     public int getApiCalls() { return apiCalls; }
     public void setApiCalls(int apiCalls) { this.apiCalls = apiCalls; }
 
-    public String getSessionFile() { return sessionFile; }
-    public void setSessionFile(String sessionFile) { this.sessionFile = sessionFile; }
+    public List<String> getSessionFiles() { return sessionFiles; }
+    public void setSessionFiles(List<String> sessionFiles) { this.sessionFiles = sessionFiles; }
 
     public String getWorkDir() { return workDir; }
     public void setWorkDir(String workDir) { this.workDir = workDir; }
@@ -89,8 +92,8 @@ public class MigrationResult {
     public String getRunName() { return runName; }
     public void setRunName(String runName) { this.runName = runName; }
 
-    public int getPiExitCode() { return piExitCode; }
-    public void setPiExitCode(int piExitCode) { this.piExitCode = piExitCode; }
+    public int getAiExitCode() { return aiExitCode; }
+    public void setAiExitCode(int aiExitCode) { this.aiExitCode = aiExitCode; }
 
     public String getReview() { return review; }
     public void setReview(String review) { this.review = review; }
@@ -104,15 +107,22 @@ public class MigrationResult {
     public String getProject() { return project; }
     public String getModel() { return model; }
     public String getStrategy() { return strategy; }
-    public String getSkill() { return skill; }
+    public String getSkill() { return skillRef.name(); }
+    public SkillReference getSkillRef() { return skillRef; }
     public Instant getTimestamp() { return timestamp; }
 
     @Override
     public String toString() {
         var sb = new StringBuilder();
         sb.append("Migration Result: %s [%s]\n".formatted(project, score()));
+        sb.append("  agent:    %s\n".formatted(agent));
         sb.append("  model:    %s\n".formatted(model));
         sb.append("  strategy: %s\n".formatted(strategy));
+        sb.append("  skill:    %s\n".formatted(skillRef.name()));
+        if (skillRef.isRemote()) {
+            sb.append("  skill-url: %s\n".formatted(skillRef.url()));
+        }
+        sb.append("  skill-path: %s\n".formatted(skillRef.localPath()));
         sb.append("  duration: %ds\n".formatted(getDuration().toSeconds()));
         sb.append("  tokens:   %d\n".formatted(totalTokens));
         sb.append("  cost:     $%.4f\n".formatted(totalCost));

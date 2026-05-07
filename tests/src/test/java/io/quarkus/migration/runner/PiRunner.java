@@ -1,4 +1,4 @@
-package io.quarkus.migration;
+package io.quarkus.migration.runner;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -14,28 +14,76 @@ import java.util.concurrent.*;
  * Runs the pi coding agent against a project directory with a migration skill.
  * Uses --mode json for structured streaming output.
  */
-public class PiRunner {
+public class PiRunner extends AbstractRunner implements AgentRunner {
 
-    private static final ObjectMapper JSON = new ObjectMapper();
+    public PiRunner(String aiCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds, String prompt, boolean sanitize) {
+        super(aiCmd, provider, model, skillPath, strategy, timeoutSeconds, prompt, sanitize);
+    }
 
-    private final String piCmd;
-    private final String provider;
-    private final String model;
-    private final Path skillPath;
-    private final String strategy;
-    private final int timeoutSeconds;
+    @Override
+    public AgentRunner.UsageStats extractUsage(List<String> sessionFiles) {
+        if (sessionFiles == null) {
+            return new AgentRunner.UsageStats(0, 0.0, 0, "unknown");
+        }
 
-    public PiRunner(String piCmd, String provider, String model, Path skillPath, String strategy, int timeoutSeconds) {
-        this.piCmd = piCmd;
-        this.provider = provider;
-        this.model = model;
-        this.skillPath = skillPath;
-        this.strategy = strategy;
-        this.timeoutSeconds = timeoutSeconds;
+        long totalTokens = 0;
+        double totalCost = 0.0;
+        int apiCalls = 0;
+        String actualModel = "unknown";
+
+        for (String sessionFile : sessionFiles) {
+            if (sessionFile == null) {
+                continue;
+            }
+            try (var reader = new BufferedReader(new FileReader(sessionFile))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    try {
+                        JsonNode entry = JSON.readTree(line);
+                        if ("message".equals(entry.path("type").asText())) {
+                            JsonNode msg = entry.path("message");
+                            if ("assistant".equals(msg.path("role").asText())) {
+                                JsonNode usage = msg.path("usage");
+                                totalTokens += usage.path("totalTokens").asLong(0);
+                                totalCost += usage.path("cost").path("total").asDouble(0.0);
+                                apiCalls++;
+
+                                if ("unknown".equals(actualModel)) {
+                                    String provider = msg.path("provider").asText("?");
+                                    String m = msg.path("model").asText("?");
+                                    actualModel = provider + "/" + m;
+                                }
+                            }
+                        }
+                    } catch (Exception ignored) {
+                    }
+                }
+            } catch (IOException e) {
+                // session file not found or unreadable
+            }
+        }
+
+        return new AgentRunner.UsageStats(totalTokens, totalCost, apiCalls, actualModel);
+    }
+
+    @Override
+    void addModelArgs(List<String> cmd) {
+        boolean hasProvider = provider != null && !provider.isBlank();
+        boolean hasModel = model != null && !model.isBlank();
+
+        if (hasProvider && hasModel) {
+            cmd.add("--provider");
+            cmd.add(provider);
+            cmd.add("--model");
+            cmd.add(model);
+        } else if (hasModel) {
+            cmd.add("--model");
+            cmd.add(model);
+        }
     }
 
     /**
-     * Run the migration agent against the given project directory.
+     * Run the migration pi agent against the given project directory.
      * Streams structured JSON output to console in real-time.
      *
      * @param projectDir the project to migrate (pi works in this directory)
@@ -46,20 +94,10 @@ public class PiRunner {
         Files.createDirectories(outputDir);
         Path sessionDir = Files.createTempDirectory("pi-session-");
 
-        String prompt = """
-                Migrate this Spring Boot project to Quarkus using the %s migration strategy. \
-                Work entirely within this directory. \
-                Do a full migration — convert all source files, build files, config, and tests. \
-                After migration, verify the project compiles with ./mvnw compile and fix any errors. \
-                Then run ./mvnw test and fix any test failures.
-                If you need to delete code or files, explain why you are deleting them and what you are replacing them with.
-                If anything could not be converted/migrated explain why - do not just delete/remove it without explaining.
-                Include a summary of the migration in the end of the output.""".formatted(strategy);
-
         List<String> cmd = new ArrayList<>();
         // Pi requires a pseudo-TTY — use `script -q /dev/null` to provide one
         cmd.addAll(List.of("script", "-q", "/dev/null"));
-        cmd.add(piCmd);
+        cmd.add(aiCmd);
         cmd.add("--print");
         cmd.add("--mode");
         cmd.add("json");
@@ -77,7 +115,7 @@ public class PiRunner {
         Path logFile = outputDir.resolve(runName + ".json.log");
         Path prettyFile = outputDir.resolve(runName + ".pretty.md");
 
-        System.out.println("  pi cwd:     " + projectDir);
+        System.out.println("  ai cwd:     " + projectDir);
         System.out.println("  output dir: " + outputDir);
         System.out.println("  run name:   " + runName);
         System.out.println();
@@ -136,6 +174,7 @@ public class PiRunner {
             int exitCode;
             if (!finished) {
                 System.out.println("\n  ⏰ TIMEOUT after " + timeoutSeconds + "s — killing pi");
+                process.descendants().forEach(ProcessHandle::destroyForcibly);
                 process.destroyForcibly();
                 process.waitFor(10, TimeUnit.SECONDS);
                 exitCode = -1;
@@ -166,150 +205,9 @@ public class PiRunner {
                 Files.copy(Path.of(sessionFile), sessionCopy, StandardCopyOption.REPLACE_EXISTING);
             }
 
-            return new RunOutput(exitCode, duration, sessionFile, logFile.toString());
+            //TODO: iterate through the list
+            return new RunOutput(exitCode, duration, Collections.singletonList(sessionFile), logFile.toString());
         }
-    }
-
-    /** Print to both System.out and the pretty log file. */
-    private static void printBoth(String text, BufferedWriter prettyWriter) {
-        System.out.println(text);
-        try {
-            synchronized (prettyWriter) {
-                prettyWriter.write(text);
-                prettyWriter.newLine();
-                prettyWriter.flush();
-            }
-        } catch (IOException ignored) {}
-    }
-
-    /** Print (no newline) to both System.out and the pretty log file. */
-    private static void printBothRaw(String text, BufferedWriter prettyWriter) {
-        System.out.print(text);
-        System.out.flush();
-        try {
-            synchronized (prettyWriter) {
-                prettyWriter.write(text);
-                prettyWriter.flush();
-            }
-        } catch (IOException ignored) {}
-    }
-
-    /**
-     * Print a human-readable summary of a JSON streaming event.
-     * Focuses on high-level actions: tool calls, tool results, text output, turns.
-     */
-    private void printEvent(JsonNode event, BufferedWriter prettyWriter) {
-        String type = event.path("type").asText("");
-
-        switch (type) {
-            case "turn_start" -> printBoth("  ┌── turn", prettyWriter);
-
-            case "turn_end" -> printBoth("  └── turn end", prettyWriter);
-
-            case "message_start" -> {
-                String role = event.path("message").path("role").asText("");
-                if ("assistant".equals(role)) {
-                    printBoth("  │ 🤖 assistant:", prettyWriter);
-                }
-            }
-
-            case "message_end" -> {
-                JsonNode msg = event.path("message");
-                if ("assistant".equals(msg.path("role").asText(""))) {
-                    JsonNode usage = msg.path("usage");
-                    long tokens = usage.path("totalTokens").asLong(0);
-                    double cost = usage.path("cost").path("total").asDouble(0);
-                    if (tokens > 0) {
-                        printBoth(String.format("  │    [tokens: %d, cost: $%.4f]", tokens, cost), prettyWriter);
-                    }
-                }
-            }
-
-            case "message_update" -> {
-                JsonNode ae = event.path("assistantMessageEvent");
-                String aeType = ae.path("type").asText("");
-
-                switch (aeType) {
-                    case "text_delta" -> printBothRaw(ae.path("delta").asText(""), prettyWriter);
-                    case "text_end" -> printBoth("", prettyWriter);
-                    default -> {}
-                }
-            }
-
-            case "tool_execution_start" -> {
-                String toolName = event.path("toolName").asText("");
-                JsonNode args = event.path("args");
-
-                String line = switch (toolName) {
-                    case "bash" -> {
-                        String command = args.path("command").asText("");
-                        if (command.length() > 120) command = command.substring(0, 117) + "...";
-                        yield "  │ 🔧 bash: " + command;
-                    }
-                    case "edit" -> {
-                        String path = args.path("path").asText("");
-                        int edits = args.path("edits").size();
-                        yield "  │ 🔧 edit: " + path + " (" + edits + " edit" + (edits != 1 ? "s" : "") + ")";
-                    }
-                    case "write" -> "  │ 🔧 write: " + args.path("path").asText("");
-                    case "read" -> "  │ 🔧 read: " + args.path("path").asText("");
-                    default -> "  │ 🔧 " + toolName;
-                };
-                printBoth(line, prettyWriter);
-            }
-
-            case "tool_execution_end" -> {
-                JsonNode result = event.path("result");
-                if (result.path("isError").asBoolean(false)) {
-                    printBoth("  │ ❌ " + event.path("toolName").asText("") + " error", prettyWriter);
-                }
-            }
-
-            // Ignore: session, agent_start, thinking_*, etc.
-        }
-    }
-
-    /**
-     * Parse a pi session JSONL file to extract token usage and cost.
-     */
-    public static UsageStats extractUsage(String sessionFile) {
-        if (sessionFile == null) {
-            return new UsageStats(0, 0.0, 0, "unknown");
-        }
-
-        long totalTokens = 0;
-        double totalCost = 0.0;
-        int apiCalls = 0;
-        String actualModel = "unknown";
-
-        try (var reader = new BufferedReader(new FileReader(sessionFile))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                try {
-                    JsonNode entry = JSON.readTree(line);
-                    if ("message".equals(entry.path("type").asText())) {
-                        JsonNode msg = entry.path("message");
-                        if ("assistant".equals(msg.path("role").asText())) {
-                            JsonNode usage = msg.path("usage");
-                            totalTokens += usage.path("totalTokens").asLong(0);
-                            totalCost += usage.path("cost").path("total").asDouble(0.0);
-                            apiCalls++;
-
-                            if ("unknown".equals(actualModel)) {
-                                String provider = msg.path("provider").asText("?");
-                                String m = msg.path("model").asText("?");
-                                actualModel = provider + "/" + m;
-                            }
-                        }
-                    }
-                } catch (Exception ignored) {
-                }
-            }
-        } catch (IOException e) {
-            // session file not found or unreadable
-        }
-
-        return new UsageStats(totalTokens, totalCost, apiCalls, actualModel);
     }
 
     /**
@@ -358,7 +256,7 @@ public class PiRunner {
 
         List<String> cmd = new ArrayList<>();
         cmd.addAll(List.of("script", "-q", "/dev/null"));
-        cmd.add(piCmd);
+        cmd.add(aiCmd);
         cmd.addAll(List.of("--print", "--mode", "json"));
         cmd.addAll(List.of("--no-skills", "--no-prompt-templates"));
         cmd.addAll(List.of("--fork", migrationSessionFile));
@@ -425,7 +323,8 @@ public class PiRunner {
                     .reduce((a, b) -> b)
                     .orElse(null);
         }
-        UsageStats reviewUsage = extractUsage(reviewSessionFile);
+        //TODO: iterate through the list
+        UsageStats reviewUsage = extractUsage(Collections.singletonList(reviewSessionFile));
 
         // Save review to file
         String review = reviewText.toString().trim();
@@ -439,20 +338,4 @@ public class PiRunner {
 
         return new ReviewOutput(review, reviewUsage);
     }
-
-    /** Add --provider and/or --model args to the command. Either or both can be set. */
-    private void addModelArgs(List<String> cmd) {
-        if (provider != null && !provider.isBlank()) {
-            cmd.add("--provider");
-            cmd.add(provider);
-        }
-        if (model != null && !model.isBlank()) {
-            cmd.add("--model");
-            cmd.add(model);
-        }
-    }
-
-    public record RunOutput(int exitCode, Duration duration, String sessionFile, String logFile) {}
-    public record UsageStats(long totalTokens, double totalCost, int apiCalls, String actualModel) {}
-    public record ReviewOutput(String review, UsageStats usage) {}
 }

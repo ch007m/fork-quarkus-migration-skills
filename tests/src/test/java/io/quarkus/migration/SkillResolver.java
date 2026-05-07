@@ -14,13 +14,18 @@ import java.util.concurrent.TimeUnit;
  * <p>Supported formats for {@code skillRef}:
  * <ul>
  *   <li>Skill name (e.g. {@code spring-boot-to-quarkus}) — looks up in the local skills/ directory</li>
- *   <li>GitHub URL (e.g. {@code https://github.com/org/repo/tree/branch/subpath}) — clones and navigates</li>
+ *   <li>GitHub URL with {@code /tree/} (e.g. {@code https://github.com/org/repo/tree/branch/subpath}) — clones and navigates</li>
+ *   <li>GitHub repo URL (e.g. {@code https://github.com/org/repo}) with {@code explicitBranch}
+ *       set to {@code branch/subpath} — clones the branch and navigates to the subpath</li>
  * </ul>
  *
  * <p>Branch disambiguation: GitHub URLs are parsed by splitting on the first {@code /} after
  * {@code /tree/}, which fails when the branch name itself contains a {@code /} and there is also
  * a subpath (e.g. {@code tree/feature/my-branch/skills/my-skill}). In that case pass the branch
  * name explicitly via {@code explicitBranch} and the subpath will be derived from the URL.
+ *
+ * <p>When the URL has no {@code /tree/} path, {@code explicitBranch} is parsed as
+ * {@code branch[/subpath]} (split on the first {@code /}).
  *
  * <p>Remote clones are cached in {@code downloadDir} for the duration of the test run
  * and cleaned up with {@code mvn clean}.
@@ -89,6 +94,15 @@ public class SkillResolver {
                 } else {
                     branch = rest;
                 }
+            }
+        } else if (explicitBranch != null) {
+            // No /tree/ in URL: treat explicitBranch as "branch[/subpath]"
+            int slashIdx = explicitBranch.indexOf('/');
+            if (slashIdx >= 0) {
+                branch = explicitBranch.substring(0, slashIdx);
+                subPath = explicitBranch.substring(slashIdx + 1);
+            } else {
+                branch = explicitBranch;
             }
         }
 
