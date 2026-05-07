@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static io.quarkus.migration.runner.SessionExporter.exportSessions;
+import static io.quarkus.migration.runner.OpenCodeSessionExporter.exportSessions;
 
 public class OpenCodeRunner extends AbstractRunner implements AgentRunner {
 
